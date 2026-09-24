@@ -23,30 +23,30 @@ def priority_score(task: Task, now: datetime) -> tuple[float, list[str]]:
     due = datetime.fromisoformat(task.due_at)
     hours_left = (due - now).total_seconds() / 3600
     if hours_left <= 0:
-        urgency, reasons = 70, ["overdue"]
+        urgency, reasons = 70, ["已经逾期"]
     elif hours_left <= 24:
-        urgency, reasons = 50, ["due within 24 hours"]
+        urgency, reasons = 50, ["24小时内截止"]
     elif hours_left <= 72:
-        urgency, reasons = 30, ["due within 3 days"]
+        urgency, reasons = 30, ["3天内截止"]
     elif hours_left <= 168:
-        urgency, reasons = 15, ["due this week"]
+        urgency, reasons = 15, ["本周截止"]
     else:
-        urgency, reasons = max(0, 10 - hours_left / 168), ["future deadline"]
+        urgency, reasons = max(0, 10 - hours_left / 168), ["截止时间较远"]
     importance_points = task.importance * 10
     if task.importance >= 4:
-        reasons.append("high importance")
+        reasons.append("重要程度较高")
     deferral_points = min(task.deferrals * 8, 24)
     if task.deferrals:
-        reasons.append(f"replanned {task.deferrals} time(s)")
+        reasons.append(f"已经重新规划{task.deferrals}次")
     short_task_bonus = 6 if task.estimate_minutes <= 30 else 0
     if short_task_bonus:
-        reasons.append("quick win")
+        reasons.append("可以快速完成")
     return round(urgency + importance_points + deferral_points + short_task_bonus, 1), reasons
 
 
 def build_plan(tasks: list[Task], available_minutes: int, now: datetime | None = None) -> dict:
     if available_minutes < 15 or available_minutes > 720:
-        raise ValueError("Available time must be between 15 and 720 minutes.")
+        raise ValueError("可用时间必须在15到720分钟之间。")
     now = now or datetime.now()
     scored = []
     for task in tasks:

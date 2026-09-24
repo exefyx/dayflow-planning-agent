@@ -68,11 +68,11 @@ def list_tasks():
 @app.post("/api/tasks", status_code=201)
 def create_task(task: TaskIn):
     if task.energy not in {"low", "medium", "high"}:
-        raise HTTPException(422, detail="Energy must be low, medium or high")
+        raise HTTPException(422, detail="精力要求必须是低、中或高")
     try:
         datetime.fromisoformat(task.due_at)
     except ValueError as exc:
-        raise HTTPException(422, detail="Invalid due date") from exc
+        raise HTTPException(422, detail="截止时间格式无效") from exc
     with connect() as db:
         cursor = db.execute("INSERT INTO tasks(title,due_at,estimate_minutes,importance,energy,created_at) VALUES(?,?,?,?,?,?)",
             (task.title, task.due_at, task.estimate_minutes, task.importance, task.energy, datetime.now().isoformat()))
@@ -83,10 +83,10 @@ def create_task(task: TaskIn):
 @app.patch("/api/tasks/{task_id}/{action}")
 def update_task(task_id: int, action: str):
     if action not in {"complete", "replan", "reopen"}:
-        raise HTTPException(422, detail="Unknown action")
+        raise HTTPException(422, detail="无法识别的操作")
     with connect() as db:
         if not db.execute("SELECT id FROM tasks WHERE id=?", (task_id,)).fetchone():
-            raise HTTPException(404, detail="Task not found")
+            raise HTTPException(404, detail="没有找到这个任务")
         if action == "complete":
             db.execute("UPDATE tasks SET status='done' WHERE id=?", (task_id,))
         elif action == "reopen":
@@ -110,9 +110,9 @@ def create_plan(request: PlanIn):
 def seed_demo():
     now = datetime.now().replace(second=0, microsecond=0)
     examples = [
-        ("Finish data analysis assignment", (now + timedelta(hours=10)).isoformat(), 90, 5, "high"),
-        ("Reply to internship email", (now + timedelta(hours=4)).isoformat(), 15, 4, "low"),
-        ("Review research paper notes", (now + timedelta(days=2)).isoformat(), 45, 3, "medium"),
+        ("完成数据分析作业", (now + timedelta(hours=10)).isoformat(), 90, 5, "high"),
+        ("回复实习邮件", (now + timedelta(hours=4)).isoformat(), 15, 4, "low"),
+        ("整理研究论文笔记", (now + timedelta(days=2)).isoformat(), 45, 3, "medium"),
     ]
     with connect() as db:
         db.execute("DELETE FROM tasks")
