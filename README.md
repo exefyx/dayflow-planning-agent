@@ -2,6 +2,8 @@
 
 A small, local-first planning agent for a common daily problem: deciding what to do when tasks have different deadlines, importance, durations and energy requirements.
 
+**Live demo:** <https://exefyx.github.io/dayflow-planning-agent/>
+
 DayFlow does not call a paid AI API. It keeps task memory in SQLite, scores urgency and importance, builds a time-constrained plan, explains each decision and learns from missed tasks by increasing their priority during replanning.
 
 ## What works
