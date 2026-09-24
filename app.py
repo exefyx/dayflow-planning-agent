@@ -1,47 +1,51 @@
 from __future__ import annotations
 
-import json
 import os
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from openai import OpenAI
 from pydantic import BaseModel, Field
 
-from agent import result_dict, run_research
+from planner import Task, build_plan
 
 
-DB_PATH = Path(os.getenv("RESEARCH_DB", "research.db"))
-MODEL = os.getenv("OPENAI_MODEL", "gpt-5.5")
-
-app = FastAPI(title="Everyday Research Agent", version="1.0.0")
+DB_PATH = Path(os.getenv("DAYFLOW_DB", "dayflow.db"))
+app = FastAPI(title="DayFlow Planning Agent", version="1.0.0")
 app.mount("/static", StaticFiles(directory=Path(__file__).parent / "static"), name="static")
 
 
 def connect():
-    connection = sqlite3.connect(DB_PATH)
-    connection.row_factory = sqlite3.Row
-    return connection
+    db = sqlite3.connect(DB_PATH)
+    db.row_factory = sqlite3.Row
+    return db
 
 
 def init_db():
     with connect() as db:
-        db.execute("""CREATE TABLE IF NOT EXISTS research_runs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            question TEXT NOT NULL, answer TEXT NOT NULL, sources TEXT NOT NULL,
-            searches TEXT NOT NULL, model TEXT NOT NULL, created_at TEXT NOT NULL
-        )""")
+        db.execute("""CREATE TABLE IF NOT EXISTS tasks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, due_at TEXT NOT NULL,
+            estimate_minutes INTEGER NOT NULL, importance INTEGER NOT NULL, energy TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'open', deferrals INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL)""")
 
 
 init_db()
 
 
-class ResearchRequest(BaseModel):
-    question: str = Field(min_length=5, max_length=1200)
+class TaskIn(BaseModel):
+    title: str = Field(min_length=2, max_length=120)
+    due_at: str
+    estimate_minutes: int = Field(ge=10, le=600)
+    importance: int = Field(ge=1, le=5)
+    energy: str = "medium"
+
+
+class PlanIn(BaseModel):
+    available_minutes: int = Field(ge=15, le=720)
 
 
 @app.get("/")
@@ -51,42 +55,67 @@ def home():
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "configured": bool(os.getenv("OPENAI_API_KEY")), "model": MODEL}
+    return {"status": "ok", "requires_api_key": False}
 
 
-@app.post("/api/research", status_code=201)
-def research(request: ResearchRequest):
-    if not os.getenv("OPENAI_API_KEY"):
-        raise HTTPException(503, detail="Set OPENAI_API_KEY before running research.")
-    try:
-        result = run_research(OpenAI(), request.question, MODEL)
-    except Exception as exc:
-        raise HTTPException(502, detail=f"Research request failed: {exc}") from exc
-    data = result_dict(result)
-    created_at = datetime.now(timezone.utc).isoformat()
+@app.get("/api/tasks")
+def list_tasks():
     with connect() as db:
-        cursor = db.execute(
-            "INSERT INTO research_runs(question, answer, sources, searches, model, created_at) VALUES(?,?,?,?,?,?)",
-            (request.question, data["answer"], json.dumps(data["sources"]), json.dumps(data["searches"]), MODEL, created_at),
-        )
-        run_id = cursor.lastrowid
-    return {"id": run_id, "question": request.question, "created_at": created_at, **data}
-
-
-@app.get("/api/history")
-def history():
-    with connect() as db:
-        rows = db.execute("SELECT id, question, model, created_at FROM research_runs ORDER BY id DESC LIMIT 20").fetchall()
+        rows = db.execute("SELECT * FROM tasks ORDER BY status, due_at").fetchall()
     return [dict(row) for row in rows]
 
 
-@app.get("/api/history/{run_id}")
-def history_item(run_id: int):
+@app.post("/api/tasks", status_code=201)
+def create_task(task: TaskIn):
+    if task.energy not in {"low", "medium", "high"}:
+        raise HTTPException(422, detail="Energy must be low, medium or high")
+    try:
+        datetime.fromisoformat(task.due_at)
+    except ValueError as exc:
+        raise HTTPException(422, detail="Invalid due date") from exc
     with connect() as db:
-        row = db.execute("SELECT * FROM research_runs WHERE id=?", (run_id,)).fetchone()
-    if not row:
-        raise HTTPException(404, detail="Research run not found")
-    data = dict(row)
-    data["sources"] = json.loads(data["sources"])
-    data["searches"] = json.loads(data["searches"])
-    return data
+        cursor = db.execute("INSERT INTO tasks(title,due_at,estimate_minutes,importance,energy,created_at) VALUES(?,?,?,?,?,?)",
+            (task.title, task.due_at, task.estimate_minutes, task.importance, task.energy, datetime.now().isoformat()))
+        row = db.execute("SELECT * FROM tasks WHERE id=?", (cursor.lastrowid,)).fetchone()
+    return dict(row)
+
+
+@app.patch("/api/tasks/{task_id}/{action}")
+def update_task(task_id: int, action: str):
+    if action not in {"complete", "replan", "reopen"}:
+        raise HTTPException(422, detail="Unknown action")
+    with connect() as db:
+        if not db.execute("SELECT id FROM tasks WHERE id=?", (task_id,)).fetchone():
+            raise HTTPException(404, detail="Task not found")
+        if action == "complete":
+            db.execute("UPDATE tasks SET status='done' WHERE id=?", (task_id,))
+        elif action == "reopen":
+            db.execute("UPDATE tasks SET status='open' WHERE id=?", (task_id,))
+        else:
+            db.execute("UPDATE tasks SET status='open', deferrals=deferrals+1 WHERE id=?", (task_id,))
+        row = db.execute("SELECT * FROM tasks WHERE id=?", (task_id,)).fetchone()
+    return dict(row)
+
+
+@app.post("/api/plan")
+def create_plan(request: PlanIn):
+    with connect() as db:
+        rows = db.execute("SELECT * FROM tasks WHERE status='open'").fetchall()
+    tasks = [Task(row["id"], row["title"], row["due_at"], row["estimate_minutes"],
+                  row["importance"], row["energy"], row["deferrals"]) for row in rows]
+    return build_plan(tasks, request.available_minutes)
+
+
+@app.post("/api/demo", status_code=201)
+def seed_demo():
+    now = datetime.now().replace(second=0, microsecond=0)
+    examples = [
+        ("Finish data analysis assignment", (now + timedelta(hours=10)).isoformat(), 90, 5, "high"),
+        ("Reply to internship email", (now + timedelta(hours=4)).isoformat(), 15, 4, "low"),
+        ("Review research paper notes", (now + timedelta(days=2)).isoformat(), 45, 3, "medium"),
+    ]
+    with connect() as db:
+        db.execute("DELETE FROM tasks")
+        for item in examples:
+            db.execute("INSERT INTO tasks(title,due_at,estimate_minutes,importance,energy,created_at) VALUES(?,?,?,?,?,?)", (*item, now.isoformat()))
+    return {"created": len(examples)}

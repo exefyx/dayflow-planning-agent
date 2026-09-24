@@ -1,35 +1,40 @@
-# Everyday Research Agent
+# DayFlow Planning Agent
 
-A small AI demo for questions that are annoying to research repeatedly: comparing products, checking current rules, choosing tools, or turning scattered sources into a short decision brief.
+A small, local-first planning agent for a common daily problem: deciding what to do when tasks have different deadlines, importance, durations and energy requirements.
 
-The model is not used as a text box. It receives a real web-search tool, decides what to search, checks current sources, returns citations, and saves each research run for later review.
+DayFlow does not call a paid AI API. It keeps task memory in SQLite, scores urgency and importance, builds a time-constrained plan, explains each decision and learns from missed tasks by increasing their priority during replanning.
 
-## Features
+## What works
 
-- Agentic web research through the OpenAI Responses API
-- Required live search for current, source-backed answers
-- Visible source links and search-query trace
-- Clear uncertainty and next-step sections
-- SQLite research history
-- Small web interface, REST API and automated tests
-- Configurable model through `OPENAI_MODEL`
+- Add tasks with deadline, duration, importance and required energy
+- Generate a realistic plan for the time available today
+- Split long tasks into focus blocks of up to 50 minutes
+- Explain why each task was prioritised
+- Mark tasks complete, missed or reopened
+- Replan missed work with a deferral penalty
+- Store all task memory locally in SQLite
+- Load a one-click demonstration day
+- Use a responsive browser interface
+
+## Why this is agent-like
+
+The application has four explicit parts of an agent loop:
+
+1. **Memory** — persistent tasks and past deferrals
+2. **Planning** — priority scoring and time constraints
+3. **Action** — a concrete ordered work plan
+4. **Feedback** — completion or missed-task signals change the next plan
+
+The implementation is deliberately transparent: the user can see every score and explanation instead of trusting an unexplained model output.
 
 ## Run
 
 ```bash
-python -m venv .venv
-# Activate the environment, then:
 pip install -r requirements.txt
-copy .env.example .env
-```
-
-Set `OPENAI_API_KEY` in your environment. Do not commit the key.
-
-```bash
 uvicorn app:app --reload
 ```
 
-Open `http://127.0.0.1:8000`.
+Open `http://127.0.0.1:8000`. No API key, account or internet connection is required.
 
 ## Test
 
@@ -37,12 +42,6 @@ Open `http://127.0.0.1:8000`.
 pytest -q
 ```
 
-The tests use a fake Responses client, so they do not spend API credits.
+## Technology
 
-## What this demonstrates
-
-The project is intentionally small. Its purpose is to show practical interest in agent workflows: connecting a model to a tool, making tool use observable, preserving citations, handling configuration safely and turning the result into a reusable everyday utility.
-
-## Privacy and cost
-
-Questions are sent to the configured OpenAI API project and saved locally in SQLite. Web search and model usage may incur API charges. Avoid submitting confidential information.
+Python, FastAPI, SQLite, constraint-based scheduling, HTML, CSS and JavaScript.
