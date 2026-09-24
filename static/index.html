@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Everyday Research Agent</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <main>
+    <p class="eyebrow">SMALL AI EXPERIMENT</p>
+    <h1>Everyday Research Agent</h1>
+    <p class="intro">Ask a practical question. The agent decides what to search, checks current web sources, writes a short brief and saves the result.</p>
+    <form id="form">
+      <textarea id="question" minlength="5" maxlength="1200" required placeholder="Example: Compare two note-taking apps for a student who needs offline access and bilingual search."></textarea>
+      <button>Research with sources</button>
+    </form>
+    <p id="status" role="status"></p>
+    <article id="result" hidden></article>
+    <section>
+      <h2>Recent questions</h2>
+      <div id="history" class="history"></div>
+    </section>
+  </main>
+  <script src="/static/app.js"></script>
+</body>
+</html>
