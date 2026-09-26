@@ -1,61 +1,89 @@
 # DayFlow Planning Agent
 
-A small, local-first planning agent for a common daily problem: deciding what to do when tasks have different deadlines, importance, durations and energy requirements.
+DayFlow 是一个本地优先、无需 API Key 的可解释日程规划 Agent。它解决的不是“记录待办”，而是一个更具体的问题：当任务拥有不同截止时间、重要程度、预计耗时与精力要求时，今天究竟应该先做什么，以及有限时间应该如何分配。
 
-**Live demo:** <https://exefyx.github.io/dayflow-planning-agent/>
+**在线体验：** <https://exefyx.github.io/dayflow-planning-agent/>
 
-DayFlow does not call a paid AI API. It keeps task memory in SQLite, scores urgency and importance, builds a time-constrained plan, explains each decision and learns from missed tasks by increasing their priority during replanning.
+## 完整工作流
 
-## What works
+1. 记录任务的截止时间、预计耗时、重要程度和精力要求。
+2. 输入今天的开始时间、可用时间和休息长度。
+3. DayFlow 计算每项任务的透明优先分数。
+4. 系统以不超过 50 分钟的专注块编排时间线，并自动插入休息。
+5. 完成、延期或重新打开任务，反馈会影响下一次规划。
+6. 导出 JSON 备份，在另一浏览器中重新导入。
 
-- Add tasks with deadline, duration, importance and required energy
-- Generate a realistic plan for the time available today
-- Generate a clock-based timeline with focus blocks and breaks
-- Rotate between tasks so one long task cannot consume the whole plan
-- Explain why each task was prioritised
-- Edit, delete, complete, miss or reopen tasks
-- Replan missed work with a deferral penalty
-- Store all task memory locally in SQLite
-- Load a demonstration day with overwrite protection
-- Optionally parse a natural-language task with a local Ollama model
-- Use a responsive browser interface
+## 在线版本功能
 
-## Why this is agent-like
+- 浏览器本地持久化，不上传任务信息
+- 待完成、今日截止、完成率和预计投入统计
+- 完整的新增、编辑、完成、延期、重新打开和删除流程
+- 全部／待完成／已完成任务筛选
+- 可解释优先级与时间块规划
+- 超出今日容量的剩余工作提示
+- JSON 导入和导出
+- 一键加载示例工作日
+- 桌面端与移动端响应式界面
 
-The application has four explicit parts of an agent loop:
+## 为什么它是 Agent
 
-1. **Memory** — persistent tasks and past deferrals
-2. **Planning** — priority scoring and time constraints
-3. **Action** — a concrete ordered work plan
-4. **Feedback** — completion or missed-task signals change the next plan
+DayFlow 具备一个清晰且可验证的 Agent 循环：
 
-The implementation is deliberately transparent: the user can see every score and explanation instead of trusting an unexplained model output.
+1. **Memory** — 保存任务状态与历史延期次数
+2. **Planning** — 根据时限和约束计算优先级
+3. **Action** — 输出带有时钟时间的执行计划
+4. **Feedback** — 完成或延期信号改变下一轮规划
 
-## Run
+算法保持透明：每个专注块都会展示优先分数与安排原因，而不是要求用户相信一个无法解释的黑盒结果。
+
+## 本地后端版本
+
+仓库同时提供 FastAPI + SQLite 版本，适合展示完整前后端能力：
 
 ```bash
 pip install -r requirements.txt
 uvicorn app:app --reload
 ```
 
-Open `http://127.0.0.1:8000`. No API key, account or internet connection is required.
+打开 `http://127.0.0.1:8000`。无需账号、外部服务或联网。
 
-### Optional local language model
+### 可选本地语言模型
 
-The manual planner is fully functional without a model. If Ollama is already installed, pull the default small model and restart DayFlow:
+如果电脑已经安装 Ollama，可以让本地模型把自然语言任务转换成表单字段：
 
 ```bash
 ollama pull qwen2.5:1.5b
 ```
 
-You can select another installed model with `OLLAMA_MODEL`. Natural-language parsing only fills the task form; the user reviews the fields before saving.
+语言模型只负责填写草稿，任务在用户检查并确认后才会保存。手动规划功能完全不依赖模型。
 
-## Test
+## 规划逻辑
+
+优先分数综合考虑：
+
+- 截止时间压力
+- 任务重要程度
+- 历史延期次数
+- 短任务快速完成奖励
+- 同分情况下的精力要求
+
+规划器以轮转方式安排任务，避免一个长任务占满全部可用时间，并严格保证“专注 + 休息 + 空余”不超过用户输入的总时间。
+
+## 测试
 
 ```bash
 pytest -q
 ```
 
-## Technology
+测试覆盖优先级、延期反馈、时间约束、公平轮转，以及任务 API 的新增、编辑、完成和删除流程。
 
-Python, FastAPI, SQLite, constraint-based scheduling, HTML, CSS and JavaScript.
+## 技术栈
+
+- Python、FastAPI、SQLite、Pydantic
+- 原生 HTML、CSS、JavaScript
+- 可解释评分与约束式时间规划
+- localStorage 离线演示版本
+
+## 隐私
+
+GitHub Pages 在线演示只在当前浏览器保存任务。FastAPI 本地版本使用本机 SQLite 数据库。项目不会把任务内容发送给第三方；可选 Ollama 调用也只发生在本机。
